@@ -74,8 +74,9 @@
     const cur = getCurrency();
     const sym = document.getElementById('amountSymbol');
     if (sym) sym.textContent = cur.symbol;
-    const sel = document.getElementById('currencySelect');
-    if (sel) sel.value = currencyCode;
+    document.querySelectorAll('.currency-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.code === currencyCode);
+    });
   }
 
   function loadSettings() {
@@ -90,19 +91,22 @@
   }
 
   function initCurrencySelect() {
-    const sel = document.getElementById('currencySelect');
-    if (!sel) return;
-    sel.innerHTML = CURRENCIES.map(c =>
-      `<option value="${c.code}">${c.symbol} ${c.name} (${c.code})</option>`
+    const grid = document.getElementById('currencyGrid');
+    if (!grid) return;
+    grid.innerHTML = CURRENCIES.map(c =>
+      `<button type="button" class="currency-btn ${c.code === currencyCode ? 'active' : ''}" data-code="${c.code}">
+        <span class="sym">${c.symbol}</span>${c.name}
+      </button>`
     ).join('');
-    sel.value = currencyCode;
-    sel.onchange = () => {
-      currencyCode = sel.value;
-      saveSettings();
-      updateCurrencyUI();
-      renderList();
-      if (document.getElementById('pageStats').classList.contains('active')) renderStats();
-    };
+    grid.querySelectorAll('.currency-btn').forEach(btn => {
+      btn.onclick = () => {
+        currencyCode = btn.dataset.code;
+        saveSettings();
+        updateCurrencyUI();
+        renderList();
+        if (document.getElementById('pageStats').classList.contains('active')) renderStats();
+      };
+    });
   }
   function todayStr() {
     return new Date().toISOString().slice(0, 10);
@@ -234,23 +238,188 @@
 
     let income = 0, expense = 0;
     const expMap = {}, incMap = {};
+    const dayMap = {}; // date -> { income, expense }
+
     list.forEach(t => {
+      if (!dayMap[t.date]) dayMap[t.date] = { income: 0, expense: 0 };
       if (t.type === 'income') {
         income += t.amount;
         incMap[t.category] = (incMap[t.category] || 0) + t.amount;
+        dayMap[t.date].income += t.amount;
       } else {
         expense += t.amount;
         expMap[t.category] = (expMap[t.category] || 0) + t.amount;
+        dayMap[t.date].expense += t.amount;
       }
     });
 
+    const net = income - expense;
     $('#statsIncome').textContent = formatMoney(income);
     $('#statsExpense').textContent = formatMoney(expense);
-    $('#pieTotal').textContent = formatMoney(expense).replace('¥ ', '¥');
+    const netEl = $('#statsNet');
+    netEl.textContent = (net >= 0 ? '+' : '') + formatMoney(net);
+    netEl.className = 'value ' + (net >= 0 ? 'pos' : 'neg');
 
+    // 最大支出分类
+    const expEntries = Object.entries(expMap).sort((a, b) => b[1] - a[1]);
+    if (expEntries.length) {
+      const [topId, topVal] = expEntries[0];
+      const cat = getCategory(topId);
+      const pct = expense > 0 ? ((topVal / expense) * 100).toFixed(1) : '0';
+      $('#topEmoji').textContent = cat.emoji;
+      $('#topName').textContent = cat.name;
+      $('#topAmt').textContent = formatMoney(topVal);
+      $('#topPct').textContent = `占本月支出 ${pct}% · 共 ${expEntries.length} 个分类`;
+    } else {
+      $('#topEmoji').textContent = '📦';
+      $('#topName').textContent = '暂无支出';
+      $('#topAmt').textContent = '—';
+      $('#topPct').textContent = '';
+    }
+
+    // 每日列表 + 累计
+    renderDailyList(dayMap);
+    drawTrend(dayMap);
+
+    $('#pieTotal').textContent = formatMoney(expense);
     drawPie(expMap, expense);
     renderBars('expenseBars', expMap, expense, 'expense');
     renderBars('incomeBars', incMap, income, 'income');
+  }
+
+  function renderDailyList(dayMap) {
+    const dates = Object.keys(dayMap).sort((a, b) => b.localeCompare(a));
+    const el = $('#dailyList');
+    if (!dates.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:8px 0">暂无数据</div>';
+      return;
+    }
+    // 按日期升序算累计，再倒序显示
+    const asc = [...dates].sort();
+    let cum = 0;
+    const cumMap = {};
+    asc.forEach(d => {
+      const row = dayMap[d];
+      cum += row.income - row.expense;
+      cumMap[d] = cum;
+    });
+
+    el.innerHTML = `
+      <div class="daily-row header">
+        <span>日期</span><span class="i">收入</span><span class="e">支出</span><span class="n">累计净额</span>
+      </div>` +
+      dates.map(d => {
+        const row = dayMap[d];
+        const dayNet = row.income - row.expense;
+        const c = cumMap[d];
+        const label = d.slice(5); // MM-DD
+        return `<div class="daily-row">
+          <span class="d">${label}</span>
+          <span class="i">${row.income ? formatMoney(row.income) : '—'}</span>
+          <span class="e">${row.expense ? formatMoney(row.expense) : '—'}</span>
+          <span class="n ${c >= 0 ? 'pos' : 'neg'}">${c >= 0 ? '+' : ''}${formatMoney(c)}</span>
+        </div>`;
+      }).join('');
+  }
+
+  function drawTrend(dayMap) {
+    const canvas = $('#trendChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = 340, H = 160;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const dates = Object.keys(dayMap).sort();
+    if (!dates.length) {
+      ctx.fillStyle = '#8b9bb4';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('暂无数据', W / 2, H / 2);
+      return;
+    }
+
+    let cum = 0;
+    const points = dates.map(d => {
+      cum += dayMap[d].income - dayMap[d].expense;
+      return { date: d, value: cum };
+    });
+
+    const vals = points.map(p => p.value);
+    let minV = Math.min(0, ...vals);
+    let maxV = Math.max(0, ...vals);
+    if (minV === maxV) { minV -= 1; maxV += 1; }
+    const pad = (maxV - minV) * 0.1;
+    minV -= pad; maxV += pad;
+
+    const left = 40, right = 12, top = 16, bottom = 28;
+    const plotW = W - left - right;
+    const plotH = H - top - bottom;
+
+    const xAt = i => left + (points.length === 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
+    const yAt = v => top + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+    // zero line
+    ctx.strokeStyle = '#243044';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const y0 = yAt(0);
+    ctx.moveTo(left, y0);
+    ctx.lineTo(W - right, y0);
+    ctx.stroke();
+
+    // area
+    if (points.length >= 1) {
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i), y = yAt(p.value);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(xAt(points.length - 1), y0);
+      ctx.lineTo(xAt(0), y0);
+      ctx.closePath();
+      const last = points[points.length - 1].value;
+      ctx.fillStyle = last >= 0 ? 'rgba(52,211,153,.12)' : 'rgba(251,113,133,.12)';
+      ctx.fill();
+
+      // line
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = xAt(i), y = yAt(p.value);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = last >= 0 ? '#34d399' : '#fb7185';
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // dots
+      points.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(xAt(i), yAt(p.value), 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = p.value >= 0 ? '#34d399' : '#fb7185';
+        ctx.fill();
+      });
+    }
+
+    // y labels
+    ctx.fillStyle = '#8b9bb4';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(formatMoney(maxV).replace(/\.00$/, ''), left - 4, top + 8);
+    ctx.fillText(formatMoney(minV).replace(/\.00$/, ''), left - 4, top + plotH);
+
+    // x labels (first / mid / last)
+    ctx.textAlign = 'center';
+    const labelIdx = points.length <= 3
+      ? points.map((_, i) => i)
+      : [0, Math.floor((points.length - 1) / 2), points.length - 1];
+    [...new Set(labelIdx)].forEach(i => {
+      ctx.fillText(points[i].date.slice(5), xAt(i), H - 8);
+    });
   }
 
   function drawPie(map, total) {
@@ -260,7 +429,7 @@
     const size = 200;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
 
     const entries = Object.entries(map).sort((a,b) => b[1]-a[1]);
@@ -288,7 +457,6 @@
       start += angle;
     });
 
-    // inner hole already visual by not filling
     legend.innerHTML = entries.map(([id, val], i) => {
       const c = getCategory(id);
       const pct = ((val / total) * 100).toFixed(1);

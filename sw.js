@@ -1,4 +1,4 @@
-const CACHE = 'expense-tracker-v3';
+const CACHE = 'expense-tracker-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -21,8 +21,11 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (e) => {
-  // 网络优先，保证能拿到最新代码
   e.respondWith(
     fetch(e.request)
       .then((res) => {
