@@ -77,6 +77,8 @@
     document.querySelectorAll('.currency-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.code === currencyCode);
     });
+    const sel = document.getElementById('currencySelect');
+    if (sel) sel.value = currencyCode;
   }
 
   function loadSettings() {
@@ -92,21 +94,38 @@
 
   function initCurrencySelect() {
     const grid = document.getElementById('currencyGrid');
-    if (!grid) return;
-    grid.innerHTML = CURRENCIES.map(c =>
-      `<button type="button" class="currency-btn ${c.code === currencyCode ? 'active' : ''}" data-code="${c.code}">
-        <span class="sym">${c.symbol}</span>${c.name}
-      </button>`
-    ).join('');
-    grid.querySelectorAll('.currency-btn').forEach(btn => {
-      btn.onclick = () => {
-        currencyCode = btn.dataset.code;
+    const sel = document.getElementById('currencySelect');
+
+    if (grid) {
+      grid.innerHTML = CURRENCIES.map(c =>
+        `<button type="button" class="currency-btn ${c.code === currencyCode ? 'active' : ''}" data-code="${c.code}">
+          <span class="sym">${c.symbol}</span>${c.name}
+        </button>`
+      ).join('');
+      grid.querySelectorAll('.currency-btn').forEach(btn => {
+        btn.onclick = () => {
+          currencyCode = btn.dataset.code;
+          saveSettings();
+          updateCurrencyUI();
+          renderList();
+          if (document.getElementById('pageStats') && document.getElementById('pageStats').classList.contains('active')) renderStats();
+        };
+      });
+    }
+
+    if (sel) {
+      sel.innerHTML = CURRENCIES.map(c =>
+        `<option value="${c.code}">${c.symbol} ${c.name} (${c.code})</option>`
+      ).join('');
+      sel.value = currencyCode;
+      sel.onchange = () => {
+        currencyCode = sel.value;
         saveSettings();
         updateCurrencyUI();
         renderList();
-        if (document.getElementById('pageStats').classList.contains('active')) renderStats();
+        if (document.getElementById('pageStats') && document.getElementById('pageStats').classList.contains('active')) renderStats();
       };
-    });
+    }
   }
   function todayStr() {
     return new Date().toISOString().slice(0, 10);
@@ -628,6 +647,9 @@
     $('#settingsModal').classList.remove('show');
   };
 
+  loadSettings();
   load();
+  initCurrencySelect();
+  updateCurrencyUI();
   renderList();
 })();
