@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
+  <meta name="app-version" content="20261103f" />
   <title>日常收支本</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -61,7 +62,8 @@
           <select id="statsMonth"></select>
         </div>
       </header>
-      <div class="stats-summary">
+
+      <div class="stats-summary three">
         <div class="stats-sum-card income">
           <div class="label">收入</div>
           <div class="value" id="statsIncome">¥ 0.00</div>
@@ -70,7 +72,37 @@
           <div class="label">支出</div>
           <div class="value" id="statsExpense">¥ 0.00</div>
         </div>
+        <div class="stats-sum-card net">
+          <div class="label">净余额</div>
+          <div class="value" id="statsNet">¥ 0.00</div>
+        </div>
       </div>
+
+      <div class="chart-card highlight-card" id="topExpenseCard">
+        <div class="chart-title">本月最大支出分类</div>
+        <div class="top-expense" id="topExpense">
+          <div class="top-emoji" id="topEmoji">📦</div>
+          <div class="top-info">
+            <div class="top-name" id="topName">暂无数据</div>
+            <div class="top-amt" id="topAmt">—</div>
+            <div class="top-pct" id="topPct"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">每日累计净余额</div>
+        <div class="trend-wrap">
+          <canvas id="trendChart" width="340" height="160"></canvas>
+        </div>
+        <div class="trend-hint">折线：每天收入−支出后的累计结余</div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">每日明细（收入 / 支出 / 净额）</div>
+        <div class="daily-list" id="dailyList"></div>
+      </div>
+
       <div class="chart-card">
         <div class="chart-title">支出分类占比</div>
         <div class="pie-wrap">
@@ -82,10 +114,12 @@
         </div>
         <div class="legend" id="expenseLegend"></div>
       </div>
+
       <div class="chart-card">
         <div class="chart-title">支出分类明细</div>
         <div class="bar-list" id="expenseBars"></div>
       </div>
+
       <div class="chart-card">
         <div class="chart-title">收入分类明细</div>
         <div class="bar-list" id="incomeBars"></div>
@@ -155,7 +189,7 @@
         <div class="settings-body">
           <div class="settings-group">
             <label class="settings-label">默认货币</label>
-            <select id="currencySelect" class="settings-select"></select>
+            <div class="currency-grid" id="currencyGrid"></div>
           </div>
           <button class="settings-item" id="btnExport">📤 导出数据</button>
           <button class="settings-item" id="btnImport">📥 导入数据</button>
@@ -168,9 +202,53 @@
   </div>
   <script src="app.js"></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    }
+    (function () {
+      var VERSION = '20261103f';
+      var KEY = 'expense_app_ver';
+
+      // 注册 SW，并在有新版本时立刻接管
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').then(function (reg) {
+          setInterval(function () { reg.update(); }, 10000);
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          reg.addEventListener('updatefound', function () {
+            var w = reg.installing;
+            if (!w) return;
+            w.addEventListener('statechange', function () {
+              if (w.state === 'installed' && navigator.serviceWorker.controller) {
+                w.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+        }).catch(function () {});
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          window.location.reload();
+        });
+      }
+
+      // 每 10 秒检查服务器上的版本，有变化就自动刷新
+      function check() {
+        fetch('./index.html?_=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.text(); })
+          .then(function (text) {
+            var m = text.match(/app-version"\s+content="([^"]+)"/);
+            if (m && m[1] && m[1] !== VERSION) {
+              // 清掉旧缓存再刷新
+              if (window.caches) {
+                caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                }).finally(function () { location.reload(true); });
+              } else {
+                location.reload(true);
+              }
+            }
+          })
+          .catch(function () {});
+      }
+      setInterval(check, 10000);
+      // 首次稍后再查一次
+      setTimeout(check, 3000);
+    })();
   </script>
 </body>
 </html>
