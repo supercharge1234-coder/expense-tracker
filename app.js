@@ -1,5 +1,24 @@
 (() => {
   const STORAGE_KEY = 'expense_tracker_v1';
+  const SETTINGS_KEY = 'expense_tracker_settings_v1';
+
+  const CURRENCIES = [
+    { code: 'CNY', symbol: '¥', name: '人民币' },
+    { code: 'USD', symbol: '$', name: '美元' },
+    { code: 'HKD', symbol: 'HK$', name: '港币' },
+    { code: 'EUR', symbol: '€', name: '欧元' },
+    { code: 'JPY', symbol: '¥', name: '日元' },
+    { code: 'GBP', symbol: '£', name: '英镑' },
+    { code: 'TWD', symbol: 'NT$', name: '新台币' },
+    { code: 'SGD', symbol: 'S$', name: '新加坡元' },
+    { code: 'KRW', symbol: '₩', name: '韩元' },
+    { code: 'AUD', symbol: 'A$', name: '澳元' },
+    { code: 'CAD', symbol: 'C$', name: '加元' },
+    { code: 'MOP', symbol: 'MOP$', name: '澳门元' },
+    { code: 'THB', symbol: '฿', name: '泰铢' },
+    { code: 'MYR', symbol: 'RM', name: '马来西亚林吉特' },
+  ];
+
   const COLORS = ['#3b82f6','#fb7185','#34d399','#fbbf24','#a78bfa','#22d3ee','#f97316','#e879f9','#94a3b8'];
 
   const CATEGORIES = {
@@ -24,6 +43,7 @@
   };
 
   let transactions = [];
+  let currencyCode = 'CNY';
   let currentType = 'expense';
   let selectedCategory = null;
   let editingId = null;
@@ -40,8 +60,49 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
   }
 
+  function getCurrency() {
+    return CURRENCIES.find(c => c.code === currencyCode) || CURRENCIES[0];
+  }
+
   function formatMoney(n) {
-    return '¥ ' + Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const cur = getCurrency();
+    const num = Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return cur.symbol + ' ' + num;
+  }
+
+  function updateCurrencyUI() {
+    const cur = getCurrency();
+    const sym = document.getElementById('amountSymbol');
+    if (sym) sym.textContent = cur.symbol;
+    const sel = document.getElementById('currencySelect');
+    if (sel) sel.value = currencyCode;
+  }
+
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      if (s.currency && CURRENCIES.some(c => c.code === s.currency)) currencyCode = s.currency;
+    } catch {}
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currency: currencyCode }));
+  }
+
+  function initCurrencySelect() {
+    const sel = document.getElementById('currencySelect');
+    if (!sel) return;
+    sel.innerHTML = CURRENCIES.map(c =>
+      `<option value="${c.code}">${c.symbol} ${c.name} (${c.code})</option>`
+    ).join('');
+    sel.value = currencyCode;
+    sel.onchange = () => {
+      currencyCode = sel.value;
+      saveSettings();
+      updateCurrencyUI();
+      renderList();
+      if (document.getElementById('pageStats').classList.contains('active')) renderStats();
+    };
   }
   function todayStr() {
     return new Date().toISOString().slice(0, 10);

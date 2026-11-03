@@ -520,3 +520,27 @@ input[type="date"] { color-scheme: dark; }
   .modal { border-radius: 22px; margin: 20px; }
   .fab { right: calc(50% - 220px); }
 }
+
+.settings-group {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+}
+.settings-label {
+  display: block;
+  font-size: .78rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.settings-select {
+  width: 100%;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 1rem;
+  outline: none;
+}

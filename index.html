@@ -121,7 +121,7 @@
           <div class="form-group">
             <label>金额</label>
             <div class="amount-input">
-              <span>¥</span>
+              <span id="amountSymbol">¥</span>
               <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal" />
             </div>
           </div>
@@ -153,6 +153,10 @@
           <button class="icon-btn" id="btnCloseSettings">✕</button>
         </div>
         <div class="settings-body">
+          <div class="settings-group">
+            <label class="settings-label">默认货币</label>
+            <select id="currencySelect" class="settings-select"></select>
+          </div>
           <button class="settings-item" id="btnExport">📤 导出数据</button>
           <button class="settings-item" id="btnImport">📥 导入数据</button>
           <button class="settings-item danger" id="btnClear">🗑️ 清空全部数据</button>
